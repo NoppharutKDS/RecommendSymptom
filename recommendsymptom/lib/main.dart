@@ -59,7 +59,47 @@ class Symptom {
       id: json['id'].toString(),
       name: json['name'],
       nameEn: json['name_en'] ?? '',
-      category: json['category'] ?? 'ทั่วไป',
+      category: json['category'] ?? 'ทั้งหมด',
+    );
+  }
+}
+
+class PatientData {
+  final String gender;
+  final int age;
+  final String searchTerm;
+  final List<String> yesSymptoms;
+  final List<String> diseases;
+  final List<String> procedures;
+
+  PatientData({
+    required this.gender,
+    required this.age,
+    required this.searchTerm,
+    required this.yesSymptoms,
+    required this.diseases,
+    required this.procedures,
+  });
+
+  factory PatientData.fromJson(Map<String, dynamic> json) {
+    List<String> extractYesSymptoms = [];
+    
+    // Extract symptoms from summary.yes_symptoms
+    if (json['summary'] != null && json['summary']['yes_symptoms'] != null) {
+      for (var symptom in json['summary']['yes_symptoms']) {
+        if (symptom['text'] != null) {
+          extractYesSymptoms.add(symptom['text'].toString());
+        }
+      }
+    }
+
+    return PatientData(
+      gender: json['gender'] ?? '',
+      age: json['age'] ?? 0,
+      searchTerm: json['search_term'] ?? '',
+      yesSymptoms: extractYesSymptoms,
+      diseases: List<String>.from(json['summary']?['diseases'] ?? []),
+      procedures: List<String>.from(json['summary']?['procedures'] ?? []),
     );
   }
 }
@@ -78,7 +118,7 @@ class _SymptomRecommenderScreenState extends State<SymptomRecommenderScreen> wit
   String searchQuery = '';
   late TabController _tabController;
   bool isLoading = true;
-  List<Map<String, dynamic>> symptomDataset = [];
+  List<PatientData> patientDataset = [];
 
   final List<String> symptomCategories = [
     'ทั้งหมด',
@@ -95,7 +135,7 @@ class _SymptomRecommenderScreenState extends State<SymptomRecommenderScreen> wit
     super.initState();
     _tabController = TabController(length: symptomCategories.length, vsync: this);
     _loadSymptoms();
-    _loadSymptomDataset();
+    _loadPatientDataset();
   }
 
   Future<void> _loadSymptoms() async {
@@ -112,24 +152,26 @@ class _SymptomRecommenderScreenState extends State<SymptomRecommenderScreen> wit
     }
   }
   
-  Future<void> _loadSymptomDataset() async {
+  Future<void> _loadPatientDataset() async {
     try {
-      final String data = await rootBundle.loadString('assets/data/symptom_dataset.json');
+      final String data = await rootBundle.loadString('assets/data/patient_data.json');
       final List<dynamic> jsonResult = jsonDecode(data);
       setState(() {
-        symptomDataset = List<Map<String, dynamic>>.from(jsonResult);
+        patientDataset = jsonResult.map((e) => PatientData.fromJson(e)).toList();
       });
     } catch (e) {
-      print('Error loading symptom dataset: $e');
+      print('Error loading patient dataset: $e');
       // If loading fails, provide a fallback dataset
       setState(() {
-        symptomDataset = [
-          {"search_term": "มีเสมหะ, ไอ"},
-          {"search_term": "ไอ, น้ำมูกไหล"},
-          {"search_term": "ปวดท้อง"},
-          {"search_term": "น้ำมูกไหล"},
-          {"search_term": "ตาแห้ง"},
-          {"search_term": "ปวดกระดูก"},
+        patientDataset = [
+          PatientData(
+            gender: 'male',
+            age: 28,
+            searchTerm: 'มีเสมหะ, ไอ',
+            yesSymptoms: ['เสมหะ', 'ไอ'],
+            diseases: [],
+            procedures: [],
+          ),
         ];
       });
     }
@@ -158,23 +200,33 @@ class _SymptomRecommenderScreenState extends State<SymptomRecommenderScreen> wit
     // Create a map to count co-occurrence of symptoms
     Map<String, int> recommendationScores = {};
     
-    for (var entry in symptomDataset) {
-      String searchTerms = entry['search_term'];
-      List<String> symptoms = searchTerms.split(',').map((s) => s.trim()).toList();
+    for (var patientData in patientDataset) {
+      // Get symptoms from search_term
+      List<String> searchTermSymptoms = patientData.searchTerm
+          .split(',')
+          .map((s) => s.trim())
+          .where((s) => s.isNotEmpty)
+          .toList();
       
-      // Check if any of our selected symptoms appear in this entry
+      // Also include symptoms from yes_symptoms for better matching
+      List<String> allPatientSymptoms = [
+        ...searchTermSymptoms,
+        ...patientData.yesSymptoms,
+      ].toSet().toList(); // Remove duplicates
+      
+      // Check if any of our selected symptoms appear in this patient's data
       bool hasSelectedSymptom = false;
       for (String selected in selectedSymptoms) {
-        if (symptoms.contains(selected)) {
+        if (allPatientSymptoms.contains(selected)) {
           hasSelectedSymptom = true;
           break;
         }
       }
       
-      // If this entry contains one of our selected symptoms
+      // If this patient data contains one of our selected symptoms
       if (hasSelectedSymptom) {
-        // Add all other symptoms in this entry to our recommendation map
-        for (String symptom in symptoms) {
+        // Add all other symptoms in this patient's data to our recommendation map
+        for (String symptom in allPatientSymptoms) {
           // Skip if it's already selected or empty
           if (selectedSymptoms.contains(symptom) || symptom.isEmpty) {
             continue;
@@ -224,7 +276,7 @@ class _SymptomRecommenderScreenState extends State<SymptomRecommenderScreen> wit
           'ท่านต้องการให้เราช่วยเหลืออะไรวันนี้?',
           style: TextStyle(
             fontWeight: FontWeight.w500,
-            fontSize: 18,
+            fontSize: 16,
           ),
         ),
         backgroundColor: Theme.of(context).colorScheme.primary,
@@ -302,6 +354,7 @@ class _SymptomRecommenderScreenState extends State<SymptomRecommenderScreen> wit
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 16.0),
                       child: Container(
+                        width: double.infinity,
                         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                         decoration: BoxDecoration(
                           color: Colors.blue.shade50,
@@ -309,6 +362,7 @@ class _SymptomRecommenderScreenState extends State<SymptomRecommenderScreen> wit
                         ),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
                           children: [
                             Padding(
                               padding: const EdgeInsets.only(left: 4, bottom: 8),
@@ -318,26 +372,31 @@ class _SymptomRecommenderScreenState extends State<SymptomRecommenderScreen> wit
                                   fontWeight: FontWeight.w500,
                                   color: Theme.of(context).colorScheme.primary,
                                 ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
                               ),
                             ),
                             Wrap(
-                              spacing: 8,
-                              runSpacing: 8,
+                              spacing: 6,
+                              runSpacing: 6,
                               children: selectedSymptoms.map((symptom) {
                                 return FilterChip(
                                   label: Text(
                                     symptom,
                                     style: const TextStyle(
-                                      fontSize: 13,
+                                      fontSize: 12,
                                     ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
                                   ),
                                   selected: true,
                                   selectedColor: Theme.of(context).colorScheme.primary.withOpacity(0.2),
                                   checkmarkColor: Theme.of(context).colorScheme.primary,
                                   onSelected: (_) => _toggleSymptom(symptom),
-                                  deleteIcon: const Icon(Icons.close, size: 16),
+                                  deleteIcon: const Icon(Icons.close, size: 14),
                                   onDeleted: () => _toggleSymptom(symptom),
-                                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 0),
+                                  padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 0),
+                                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                                   shape: RoundedRectangleBorder(
                                     borderRadius: BorderRadius.circular(8),
                                   ),
@@ -354,6 +413,7 @@ class _SymptomRecommenderScreenState extends State<SymptomRecommenderScreen> wit
                     Padding(
                       padding: const EdgeInsets.fromLTRB(16.0, 8.0, 16.0, 0),
                       child: Container(
+                        width: double.infinity,
                         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                         decoration: BoxDecoration(
                           color: Colors.blue.shade50.withOpacity(0.5),
@@ -365,48 +425,58 @@ class _SymptomRecommenderScreenState extends State<SymptomRecommenderScreen> wit
                         ),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
                           children: [
                             Row(
+                              mainAxisSize: MainAxisSize.min,
                               children: [
                                 Icon(
                                   Icons.lightbulb_outline,
-                                  size: 16,
+                                  size: 14,
                                   color: Theme.of(context).colorScheme.primary,
                                 ),
                                 const SizedBox(width: 4),
-                                Text(
-                                  'แนะนำอาการอื่นที่เกี่ยวข้อง:',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.w500,
-                                    color: Theme.of(context).colorScheme.primary,
-                                    fontSize: 13,
+                                Flexible(
+                                  child: Text(
+                                    'แนะนำอาการอื่นที่เกี่ยวข้อง:',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w500,
+                                      color: Theme.of(context).colorScheme.primary,
+                                      fontSize: 12,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
                                   ),
                                 ),
                               ],
                             ),
-                            const SizedBox(height: 8),
+                            const SizedBox(height: 6),
                             Wrap(
-                              spacing: 8,
-                              runSpacing: 8,
+                              spacing: 6,
+                              runSpacing: 6,
                               children: recommendedSymptoms.map((symptom) {
                                 return ActionChip(
                                   avatar: Icon(
                                     Icons.add_circle_outline,
-                                    size: 16,
+                                    size: 14,
                                     color: Theme.of(context).colorScheme.secondary,
                                   ),
                                   label: Text(
                                     symptom,
                                     style: TextStyle(
-                                      fontSize: 13,
+                                      fontSize: 11,
                                       color: Theme.of(context).colorScheme.secondary,
                                     ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
                                   ),
                                   backgroundColor: Colors.white,
                                   side: BorderSide(
                                     color: Theme.of(context).colorScheme.secondary.withOpacity(0.3),
                                     width: 1,
                                   ),
+                                  padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 0),
+                                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                                   onPressed: () => _toggleSymptom(symptom),
                                 );
                               }).toList(),
@@ -454,7 +524,7 @@ class _SymptomRecommenderScreenState extends State<SymptomRecommenderScreen> wit
                                       size: 48,
                                       color: Colors.grey.shade400,
                                     ),
-                                    const SizedBox(height: 16),
+                                    const SizedBox(height: 14),
                                     Text(
                                       'ไม่พบอาการที่ตรงกับคำค้นหา',
                                       style: TextStyle(
@@ -465,7 +535,7 @@ class _SymptomRecommenderScreenState extends State<SymptomRecommenderScreen> wit
                                 ),
                               )
                             : ListView(
-                                padding: const EdgeInsets.all(16.0),
+                                padding: EdgeInsets.fromLTRB(16.0, 16.0, 16.0, selectedSymptoms.isNotEmpty ? 80.0 : 16.0),
                                 children: [
                                   Column(
                                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -473,32 +543,38 @@ class _SymptomRecommenderScreenState extends State<SymptomRecommenderScreen> wit
                                       Container(
                                         padding: const EdgeInsets.only(bottom: 16),
                                         child: Wrap(
-                                          spacing: 8,
-                                          runSpacing: 8,
+                                          spacing: 6,
+                                          runSpacing: 6,
                                           children: filtered.map((symptom) {
                                             final isSelected = selectedSymptoms.contains(symptom.name);
                                             return ActionChip(
                                               avatar: isSelected
                                                   ? Icon(
                                                       Icons.check_circle,
-                                                      size: 16,
+                                                      size: 14,
                                                       color: Theme.of(context).colorScheme.primary,
                                                     )
                                                   : null,
-                                              label: Text(
-                                                symptom.name,
-                                                style: TextStyle(
-                                                  color: isSelected
-                                                      ? Theme.of(context).colorScheme.primary
-                                                      : Colors.grey.shade800,
-                                                  fontWeight: isSelected ? FontWeight.w500 : FontWeight.normal,
+                                              label: ConstrainedBox(
+                                                constraints: const BoxConstraints(maxWidth: 120),
+                                                child: Text(
+                                                  symptom.name,
+                                                  style: TextStyle(
+                                                    color: isSelected
+                                                        ? Theme.of(context).colorScheme.primary
+                                                        : Colors.grey.shade800,
+                                                    fontWeight: isSelected ? FontWeight.w500 : FontWeight.normal,
+                                                    fontSize: 12,
+                                                  ),
+                                                  maxLines: 1,
+                                                  overflow: TextOverflow.ellipsis,
                                                 ),
                                               ),
                                               backgroundColor: isSelected
                                                   ? Theme.of(context).colorScheme.primary.withOpacity(0.1)
                                                   : Colors.grey.shade100,
                                               shape: RoundedRectangleBorder(
-                                                borderRadius: BorderRadius.circular(20),
+                                                borderRadius: BorderRadius.circular(16),
                                                 side: isSelected
                                                     ? BorderSide(
                                                         color: Theme.of(context).colorScheme.primary.withOpacity(0.3),
@@ -506,7 +582,8 @@ class _SymptomRecommenderScreenState extends State<SymptomRecommenderScreen> wit
                                                       )
                                                     : BorderSide.none,
                                               ),
-                                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                                               onPressed: () => _toggleSymptom(symptom.name),
                                             );
                                           }).toList(),
@@ -519,43 +596,36 @@ class _SymptomRecommenderScreenState extends State<SymptomRecommenderScreen> wit
                       }).toList(),
                     ),
                   ),
-                  // Add a call-to-action button at bottom if symptoms are selected
-                  if (selectedSymptoms.isNotEmpty)
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.grey.shade300,
-                            blurRadius: 4,
-                            offset: const Offset(0, -2),
-                          ),
-                        ],
-                      ),
-                      child: ElevatedButton(
-                        onPressed: () {
-                          // Implement next action
-                        },
-                        style: ElevatedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                        child: const Text(
-                          'แนะนำแผนกตรวจ',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ),
-                    ),
                 ],
               ),
             ),
+      // Move button to floating position to fix overflow
+      floatingActionButton: selectedSymptoms.isNotEmpty
+          ? Container(
+              width: MediaQuery.of(context).size.width - 32,
+              height: 44,
+              margin: const EdgeInsets.symmetric(horizontal: 16),
+              child: ElevatedButton(
+                onPressed: () {
+                  // Implement next action
+                },
+                style: ElevatedButton.styleFrom(
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  elevation: 4,
+                ),
+                child: const Text(
+                  'แนะนำแผนกตรวจ',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+            )
+          : null,
+      floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
     );
   }
 }
