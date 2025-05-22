@@ -1,3 +1,5 @@
+# <img src="recommendsymptom/assets/screen/Screen1.png" width="30%" height="50%"> <img src="recommendsymptom/assets/screen/Screen2.png" width="30%" height="50%">
+
 # RecommendSymptom
 
 RecommendSymptom is a mobile-application symptom recommender based on the patient information and selected symptom. This application belongs to the second task of Agnos Assignment.
