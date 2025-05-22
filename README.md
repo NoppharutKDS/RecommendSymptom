@@ -2,7 +2,7 @@
 
 # RecommendSymptom
 
-RecommendSymptom is a mobile-application symptom recommender based on the patient information and selected symptom. This application belongs to the second task of Agnos Assignment.
+RecommendSymptom is a mobile-application symptom recommender via similarity based on the patient information and selected symptom by using Case-Based Reasoning and Content-Based Filtering. This application belongs to the second task of Agnos assignment.
 
 ## Requirement before starting RecommendSymptom
 
@@ -37,3 +37,6 @@ RecommendSymptom is a mobile-application symptom recommender based on the patien
     ```
    flutter run
     ```
+
+### Data Flow Explained
+Symptom Selection Widget ─> State Management (setState / Provider) ─> Recommender Function ─> Recommended Results Display Widget
