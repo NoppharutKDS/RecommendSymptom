@@ -224,8 +224,7 @@ class _SymptomRecommenderScreenState extends State<SymptomRecommenderScreen>
   List<Symptom> filterSymptoms(List<Symptom> symptoms) {
     if (searchQuery.isEmpty) return symptoms;
     return symptoms.where((symptom) {
-      return symptom.name.toLowerCase().contains(searchQuery.toLowerCase()) || 
-             symptom.nameEn.toLowerCase().contains(searchQuery.toLowerCase());
+      return symptom.name.toLowerCase().contains(searchQuery.toLowerCase()) ;
     }).toList();
   }
 
